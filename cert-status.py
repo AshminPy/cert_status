@@ -16,11 +16,16 @@ def check_certificate(domain):
             raise Exception(f"Error obtaining certificate: {result.stderr.strip()}")
         
         # Extract certificate information using regular expressions
-        issuer = re.search(r'issuer=(.*)', result.stdout).group(1)
-        subject = re.search(r'subject=(.*)', result.stdout).group(1)
-        not_before = re.search(r'notBefore=(.*)', result.stdout).group(1)
-        not_after = re.search(r'notAfter=(.*)', result.stdout).group(1)
-        serial_number = re.search(r'serial=(.*)', result.stdout).group(1)
+        issuer_match = re.search(r'issuer=(.*)', result.stdout)
+        issuer = issuer_match.group(1) if issuer_match else None
+        subject_match = re.search(r'subject=(.*)', result.stdout)
+        subject = subject_match.group(1) if subject_match else None
+        not_before_match = re.search(r'notBefore=(.*)', result.stdout)
+        not_before = not_before_match.group(1) if not_before_match else None
+        not_after_match = re.search(r'notAfter=(.*)', result.stdout)
+        not_after = not_after_match.group(1) if not_after_match else None
+        serial_number_match = re.search(r'serial=(.*)', result.stdout)
+        serial_number = serial_number_match.group(1) if serial_number_match else None
         dns_names = re.findall(r'DNS:(\S+)', result.stdout)
         
         # Return the certificate information
@@ -29,13 +34,22 @@ def check_certificate(domain):
         print(e)
 
 def get_certificate_expiry(not_after):
+    # Check if not_after is None
+    if not_after is None:
+        print("Error: not_after is None")
+        return None
+
     # Parse the certificate expiry date and calculate the remaining days
-    if 'GMT' in not_after:
-        end_date = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
-    else:
-        end_date = datetime.datetime.strptime(not_after, '%Y-%m-%dT%H:%M:%S')
-    end_date = end_date.replace(tzinfo=datetime.timezone.utc)
-    return (end_date - datetime.datetime.now(datetime.timezone.utc)).days
+    try:
+        if 'GMT' in not_after:
+            end_date = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
+        else:
+            end_date = datetime.datetime.strptime(not_after, '%Y-%m-%dT%H:%M:%S')
+        end_date = end_date.replace(tzinfo=datetime.timezone.utc)
+        return (end_date - datetime.datetime.now(datetime.timezone.utc)).days
+    except ValueError:
+        print(f"Error parsing date: {not_after}")
+        return None
 
 def get_active_certs(domain):
     response = requests.get(f"https://crt.sh/?q={domain}&output=json")
@@ -100,9 +114,10 @@ def write_to_csv(filename, data):
             writer.writerow(row)
             
 def is_valid_domain(domain):
-    # Regular expression to check if the domain name is valid
-    pattern = r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]"
-    return re.match(pattern, domain) is not None
+    if domain.startswith('*.'):
+        domain = domain[2:]  # Remove '*.' from the start of the domain
+    pattern = re.compile("^(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+[A-Z]{2,6}\\.?|[A-Z0-9-]{2,}\\.?)$", re.IGNORECASE)
+    return pattern.match(domain) is not None
 
 # Prompt the user to enter domains
 domains = input("Enter the domains (comma separated): ").split(',')
@@ -130,9 +145,9 @@ for domain in domains:
     expiry_days = get_certificate_expiry(not_after)
     
     # Determine the color for the expiry days
-    if expiry_days < 15:
+    if expiry_days is not None and expiry_days < 15:
         expiry_color = 'red'
-    elif expiry_days < 30:
+    elif expiry_days is not None and expiry_days < 30:
         expiry_color = 'yellow'
     else:
         expiry_color = 'green'
