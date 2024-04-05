@@ -5,6 +5,12 @@ import re
 import csv
 from termcolor import colored
 
+def is_valid_domain(domain):
+    domain_regex = re.compile(
+        r'^(\*\.)?(?:[a-z0-9-]+\.)+[a-z0-9-]+$'
+    )
+    return bool(domain_regex.match(domain))
+
 def check_certificate(domain):
     try:
         # Run openssl command to obtain certificate information
@@ -68,56 +74,18 @@ def get_ip_addresses(domain):
     result = subprocess.run(f"dig +short {domain}", shell=True, stdout=subprocess.PIPE, text=True)
     return result.stdout.strip().split("\n")
 
-def write_to_csv(filename, data):
-    fieldnames = ['Common Name', 'Serial Number', 'DNS Names', 'Certificate Issued Date', 'Certificate Start Date', 'Certificate Expiry Date', 'Certificate Issuer Name', 'Count of Days remaining to Expiry']
-    
-    # Read existing data
-    existing_data = []
+def write_to_csv(filename, row):
+    fieldnames = ['Domain Name', 'Issuer Name', 'Serial Number', 'Cert Issued Date', 'Cert Expiry Date', 'Count of Days remaining to Expiry', 'SAN Names']
+    filename = f"{filename}_{datetime.datetime.now().strftime('%Y_%m_%d')}.csv"
     try:
-        with open(filename, 'r', newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                existing_data.append(row)
-    except FileNotFoundError:
-        pass  # File does not exist yet, we'll create it below
-
-    # Get set of existing serial numbers
-    existing_serial_numbers = {row['Serial Number'] for row in existing_data}
-
-    # Prepare new data
-    new_data = []
-    for row in data:
-        new_row = {
-            'Common Name': row['common_name'],
-            'Serial Number': row['serial_number'],
-            'DNS Names': row['san_names'],
-            'Certificate Issued Date': row['entry_timestamp'],
-            'Certificate Start Date': row['not_before'],
-            'Certificate Expiry Date': row['not_after'],
-            'Certificate Issuer Name': row['issuer_name'],
-            'Count of Days remaining to Expiry': row['remaining_days_to_expiry']
-        }
-        if new_row['Serial Number'] not in existing_serial_numbers:
-            new_data.append(new_row)
-            existing_serial_numbers.add(new_row['Serial Number'])  # Add the serial number to the set of existing serial numbers
-
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-
-        # Write existing data
-        for row in existing_data:
+        with open(filename, 'x', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
             writer.writerow(row)
-
-        # Write new data
-        for row in new_data:
+    except FileExistsError:
+        with open(filename, 'a', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writerow(row)
-            
-def is_valid_domain(domain):
-    if domain.startswith('*.'):
-        domain = domain[2:]  # Remove '*.' from the start of the domain
-    pattern = re.compile("^(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\\.)+[A-Z]{2,6}\\.?|[A-Z0-9-]{2,}\\.?)$", re.IGNORECASE)
-    return pattern.match(domain) is not None
 
 # Prompt the user to enter domains
 domains = input("Enter the domains (comma separated): ").split(',')
@@ -129,9 +97,6 @@ for i, domain in enumerate(domains):
         print(f"Invalid domain: {domain}")
         domain = input("Please enter a valid domain: ").strip()  # Strip leading and trailing spaces
     domains[i] = domain
-
-all_certs = []
-serial_numbers = set()
 
 # Process each domain
 for domain in domains:
@@ -164,22 +129,21 @@ for domain in domains:
     print(colored(f"Count on number of days certificate expiring in: {expiry_days}", expiry_color))
     print(f"SAN Names: {', '.join(dns_names)}")
     
+    # Write certificate information to CSV
+    row = {
+        'Domain Name': domain,
+        'Issuer Name': issuer,
+        'Serial Number': serial_number,
+        'Cert Issued Date': not_before,
+        'Cert Expiry Date': not_after,
+        'Count of Days remaining to Expiry': expiry_days,
+        'SAN Names': ', '.join(dns_names)
+    }
+    write_to_csv('cert_status.csv', row)
+    
     if certs:
         print(f"IP address of the cert location: {certs[0]['ip_address']}")
     else:
         print("No active certificates found")
     
-    # Add additional information to each certificate
-    for cert in certs:
-        cert['domain'] = domain
-        cert['san_names'] = ', '.join(dns_names)
-        cert['remaining_days_to_expiry'] = get_certificate_expiry(cert['not_after'])
-        if 'result_count' in cert:
-            del cert['result_count']
-    
-    # Add certificates to the list
-    all_certs.extend(certs)
     print("*" * 60)
-
-# Write all certificate information to a CSV file
-write_to_csv('all_cert_status.csv', all_certs)
