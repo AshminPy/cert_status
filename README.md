@@ -1,15 +1,19 @@
 README
-Certificate Status Checker:
+# Certificate Status Checker:
 This script is used to check the status of SSL certificates for a list of domains. 
 It retrieves certificate information such as the issuer, subject, issue date, expiry date, serial number, and Subject Alternative Names (SANs). 
 It also calculates the number of days remaining until the certificate expires and writes this information to a CSV file.
 
-How to Use
-Run the script in a Python environment.
-When prompted, enter the domains you want to check, separated by commas.
-The script will validate each domain, retrieve the certificate information, and write it to a CSV file.
+## How to Use
 
-Dependencies: check requirement.txt
+1. Download the `package.zip` file from this GitHub repository.
+2. Extract the ZIP file. On a Mac, you can do this by double-clicking the ZIP file. On Windows, right-click the file and select "Extract All".
+3. Run the executable from the terminal. Navigate to the directory containing the executable and run `./your_script`.
+4. Run the script in a Python environment.
+5. When prompted, enter the domains you want to check, separated by commas.
+6. The script will validate each domain, retrieve the certificate information, and write it to a CSV file.
+
+# Dependencies: check requirement.txt
 
 This script requires the following Python packages:
 
@@ -21,7 +25,7 @@ termcolor
 subprocess
 Technical Documentation
 
-The script is composed of several functions:
+# The script is composed of several functions:
 
 is_valid_domain(domain): Validates the domain name using a regular expression.
 check_certificate(domain): Uses the openssl command to retrieve certificate information for the given domain.
